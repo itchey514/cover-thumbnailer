@@ -52,6 +52,7 @@ __copyright__ = "Copyright © 2009 - 2024 Fabien LOISON"
 import re
 import sys
 import os.path
+import pathlib
 
 import gi
 gi.require_version("Gio", "2.0")
@@ -66,9 +67,9 @@ except:
 #==================================================================== CONF ====
 #Base path for cover thumbnailer's pictures
 if "DEVEL" in os.environ:
-    BASE_PATH = "./share/" #For devel
+    BASE_PATH = pathlib.Path("./share/") #For devel
 else:
-    BASE_PATH = "/usr/share/cover-thumbnailer/"
+    BASE_PATH = pathlib.Path("/usr/share/cover-thumbnailer/")
 
 #Cover files list
 COVER_FILES = ["cover.png", "cover.jpg", ".cover.png", ".cover.jpg",
@@ -76,16 +77,17 @@ COVER_FILES = ["cover.png", "cover.jpg", ".cover.png", ".cover.jpg",
         "folder.png", "folder.jpg", ".folder.png", ".folder.jpg",
         "Folder.png", "Folder.jpg", ".Folder.png", ".Folder.jpg"]
 
-#Supported picture ext (ALWAY LAST 4 CHARS !!)
-PICTURES_EXT = [".jpg", ".JPG", "jpeg", "JPEG",
-        ".png", ".PNG", #Not interlaced
-        ".gif", ".GIF",
-        ".bmp", ".BMP", #Window ans OS/2 bitmap
-        ".ico", ".ICO", #Windows icon format
-        ".tga", ".TGA", #Truevision Targa format
-        ".tif", ".TIF", "tiff", "TIFF", #Adobe Tagged Image File Format
-        ".psd", ".PSD", #Adobe Photosop format (only version 2.5 and 3.0)
-        ]
+#Supported picture ext (including dot)
+PICTURES_EXT = [
+    ".jpg", ".jpeg",
+    ".png", #Not interlaced
+    ".gif",
+    ".bmp", #Window ans OS/2 bitmap
+    ".ico", #Windows icon format
+    ".tga", #Truevision Targa format
+    ".tif", ".tiff", #Adobe Tagged Image File Format
+    ".psd", #Adobe Photosop format (only version 2.5 and 3.0)
+]
 
 #==============================================================================
 
@@ -111,103 +113,96 @@ class Conf(dict):
         self['music_cropimg'] = True
         self['music_makemosaic'] = False
         self['music_paths'] = []
-        self['music_defaultimg'] = os.path.join(BASE_PATH, "music_default.png")
-        self['music_fg'] = os.path.join(BASE_PATH, "music_fg.png")
-        self['music_bg'] = os.path.join(BASE_PATH, "music_bg.png")
+        self['music_defaultimg'] = BASE_PATH / "music_default.png"
+        self['music_fg'] = BASE_PATH / "music_fg.png"
+        self['music_bg'] = BASE_PATH / "music_bg.png"
         #Pictures
         self['pictures_enabled'] = True
         self['pictures_keepdefaulticon'] = False
         self['pictures_usegnomefolder'] = True
         self['pictures_maxthumbs'] = 3
         self['pictures_paths'] = []
-        self['pictures_fg'] = os.path.join(BASE_PATH, "pictures_fg.png")
-        self['pictures_bg'] = os.path.join(BASE_PATH, "pictures_bg.png")
+        self['pictures_fg'] = BASE_PATH / "pictures_fg.png"
+        self['pictures_bg'] = BASE_PATH / "pictures_bg.png"
         #Other
         self['other_enabled'] = True
-        self['other_fg'] = os.path.join(BASE_PATH, 'other_fg.png')
+        self['other_fg'] = BASE_PATH / 'other_fg.png'
         #Ignored
         self['ignored_dotted'] = False
         self['ignored_paths'] = []
         #Never ignored
         self['neverignored_paths'] = []
         #Global
-        self.user_homedir = os.environ.get("HOME")
-        self.user_gnomeconf = os.path.join(
-                self.user_homedir,
-                ".config/user-dirs.dirs"
-                )
-        self.user_conf = os.path.join(
-                self.user_homedir,
-                ".cover-thumbnailer/cover-thumbnailer.conf"
-                )
+        self.user_homedir = pathlib.Path.home()
+        self.user_gnomeconf = self.user_homedir / ".config/user-dirs.dirs"
+        self.user_conf = self.user_homedir / ".cover-thumbnailer/cover-thumbnailer.conf"
         #Read configuration
         self.import_user_conf()
         self.import_gnome_conf()
 
     def import_gnome_conf(self):
         """ Import user folders from GNOME configuration file. """
-        if os.path.isfile(self.user_gnomeconf):
-            gnome_conf_file = open(self.user_gnomeconf, 'r')
-            for line in gnome_conf_file:
-                if re.match(r'.*?XDG_MUSIC_DIR.*?=.*?"(.*)".*?', line) and self['music_usegnomefolder']:
-                    match = re.match(r'.*?XDG_MUSIC_DIR.*?=.*?"(.*)".*?', line)
-                    path = match.group(1).replace('$HOME', self.user_homedir)
-                    #If path == user home dir, don't use it, it's probably a misconfiguration !
-                    if os.path.isdir(path) and not os.path.samefile(path, self.user_homedir):
-                        self['music_paths'].append(path)
-                elif re.match(r'.*?XDG_PICTURES_DIR.*?=.*?"(.*)".*?', line) and self['pictures_usegnomefolder']:
-                    match = re.match(r'.*?XDG_PICTURES_DIR.*?=.*?"(.*)".*?', line)
-                    path = match.group(1).replace('$HOME', self.user_homedir)
-                    #If path == user home dir, don't use it, it's probably a misconfiguration !
-                    if os.path.isdir(path) and not os.path.samefile(path, self.user_homedir):
-                        self['pictures_paths'].append(path)
-            gnome_conf_file.close()
+        if self.user_gnomeconf.is_file():
+            with self.user_gnomeconf.open() as gnome_conf_file:
+                for line in gnome_conf_file:
+                    if re.match(r'.*?XDG_MUSIC_DIR.*?=.*?"(.*)".*?', line) and self['music_usegnomefolder']:
+                        match = re.match(r'.*?XDG_MUSIC_DIR.*?=.*?"(.*)".*?', line)
+                        if match:
+                            path = pathlib.Path(match.group(1).replace('$HOME', str(self.user_homedir)))
+                            #If path == user home dir, don't use it, it's probably a misconfiguration !
+                            if path.is_dir() and not path.samefile(self.user_homedir):
+                                self['music_paths'].append(path)
+                    elif re.match(r'.*?XDG_PICTURES_DIR.*?=.*?"(.*)".*?', line) and self['pictures_usegnomefolder']:
+                        match = re.match(r'.*?XDG_PICTURES_DIR.*?=.*?"(.*)".*?', line)
+                        if match:
+                            path = pathlib.Path(match.group(1).replace('$HOME', str(self.user_homedir)))
+                            #If path == user home dir, don't use it, it's probably a misconfiguration !
+                            if path.is_dir() and not path.samefile(self.user_homedir):
+                                self['pictures_paths'].append(path)
         else:
             print("W: [%s:Conf.import_gnome_conf] Can't find `user-dirs.dirs' file." % __file__)
 
     def import_user_conf(self):
         """ Import user configuration file. """
-        if os.path.isfile(self.user_conf):
+        if self.user_conf.is_file():
             current_section = "unknown"
-            user_conf_file = open(self.user_conf, "r")
-            for line in user_conf_file:
-                #Comments
-                if re.match(r"\s*#.*", line):
-                    continue
-                #Section
-                elif re.match(r"\s*\[([a-z]+)\]\s*", line.lower()):
-                    match = re.match(r'\s*\[([a-z]+)\]\s*', line.lower())
-                    current_section = match.group(1)
-                #Boolean key
-                elif re.match(r"\s*([a-z]+)\s*=\s*(yes|no|true|false)\s*", line.lower()):
-                    match = re.match(r"\s*([a-z]+)\s*=\s*(yes|no|true|false)\s*", line.lower())
-                    key = match.group(1)
-                    value = match.group(2)
-                    if value in ("yes", "true"):
-                        value = True
-                    else:
-                        value = False
-                    self[current_section + "_" + key] = value
-                #String key : path
-                elif re.match(r"\s*(path|PATH|Path)\s*=\s*\"(.+)\"\s*", line):
-                    match = re.match(r"\s*(path|PATH|Path)\s*=\s*\"(.+)\"\s*", line)
-                    key = "paths"
-                    value = match.group(2)
-                    self[current_section + "_" + key].append(value)
-                #Integer key
-                elif re.match(r"\s*([a-z]+)\s*=\s*([0-9]+)\s*", line.lower()):
-                    match = re.match(r"\s*([a-z]+)\s*=\s*([0-9]+)\s*", line.lower())
-                    key = match.group(1)
-                    value = match.group(2)
-                    self[current_section + "_" + key] = int(value)
-
-            user_conf_file.close()
+            with self.user_conf.open() as user_conf_file:
+                for line in user_conf_file:
+                    #Comments
+                    if re.match(r"\s*#.*", line):
+                        continue
+                    #Section
+                    elif re.match(r"\s*\[([a-z]+)\]\s*", line.lower()):
+                        match = re.match(r'\s*\[([a-z]+)\]\s*', line.lower())
+                        current_section = match.group(1)
+                    #Boolean key
+                    elif re.match(r"\s*([a-z]+)\s*=\s*(yes|no|true|false)\s*", line.lower()):
+                        match = re.match(r"\s*([a-z]+)\s*=\s*(yes|no|true|false)\s*", line.lower())
+                        key = match.group(1)
+                        value = match.group(2)
+                        if value in ("yes", "true"):
+                            value = True
+                        else:
+                            value = False
+                        self[current_section + "_" + key] = value
+                    #String key : path
+                    elif re.match(r"\s*(path|PATH|Path)\s*=\s*\"(.+)\"\s*", line):
+                        match = re.match(r"\s*(path|PATH|Path)\s*=\s*\"(.+)\"\s*", line)
+                        key = "paths"
+                        value = pathlib.Path(match.group(2))
+                        self[current_section + "_" + key].append(value)
+                    #Integer key
+                    elif re.match(r"\s*([a-z]+)\s*=\s*([0-9]+)\s*", line.lower()):
+                        match = re.match(r"\s*([a-z]+)\s*=\s*([0-9]+)\s*", line.lower())
+                        key = match.group(1)
+                        value = match.group(2)
+                        self[current_section + "_" + key] = int(value)
 
             #Replace "~/" by the user home dir
             for path_list in (self['music_paths'], self['pictures_paths'], self['ignored_paths']):
                 for i in range(0, len(path_list)):
-                    if path_list[i][0] == "~":
-                        path_list[i] = os.path.join(self.user_homedir, path_list[i][2:])
+                    path = pathlib.Path(path_list[i])
+                    path_list[i] = path.expanduser()
 
             #Import "useGnomeConf" key (for compatibility)
             if "miscellaneous_usegnomeconf" in self:
@@ -549,10 +544,13 @@ def search_cover(path):
     Argument:
       * path -- the path of the folder
     """
+    path = pathlib.Path(path)
+
     cover_path = []
     for cover in COVER_FILES:
-        if os.path.isfile(os.path.join(path, cover)):
-            cover_path.append(os.path.join(path, cover))
+        p = path / cover
+        if p.is_file():
+            cover_path.append(p)
             break
     return cover_path
 
@@ -566,11 +564,12 @@ def search_pictures(path):
     Argument:
       * path -- the path of the folder
     """
-    files = os.listdir(path)
+    path = pathlib.Path(path)
+
     pictures = []
-    for file_ in files:
-        if file_[-4:] in PICTURES_EXT:
-            pictures.append(os.path.join(path, file_))
+    for file_ in path.iterdir():
+        if file_.suffix.lower() in PICTURES_EXT:
+            pictures.append(file_)
         if len(pictures) >= 4: #4 pictures max... don't need more
             break
     return pictures
@@ -585,12 +584,14 @@ def search_pictures_recursiv(path):
     Argument:
       * path -- the path of the folder
     """
+    path = pathlib.Path(path)
+
     pictures = []
-    for root, dirs, files in os.walk(path):
+    for root, _, files in path.walk():
         if len(pictures) <= 4: #4 pictures max... don't need more
             for file_ in files:
-                if file_[-4:] in PICTURES_EXT:
-                    pictures.append(os.path.join(path, root, file_))
+                if pathlib.Path(file_).suffix.lower() in PICTURES_EXT:
+                    pictures.append(path / root / file_)
                     break
         else:
             break
@@ -604,18 +605,14 @@ def match_path(path, path_list):
       * path -- path to check
       * path_list -- list of path
     """
+    path = pathlib.Path(path)
+
     match = False
-    #We add a slash at the end.
-    if path[-1:] != "/":
-        path += "/"
     for entry in path_list:
-        #We add a slash at the end.
-        if entry[-1:] != "/":
-            entry += "/"
-        if re.match(r"^" + entry + ".*", path):
-            if path != entry:
-                match = True
-                break
+        entry = pathlib.Path(entry)
+        if entry in path.parents:
+            match = True
+            break
     return match
 
 
@@ -626,9 +623,9 @@ def gvfs_uri_to_path(uri):
     uri -- the gvfs URI
     """
     if not re.match(r"^[a-zA-Z0-9_-]+://", uri):
-        return uri
+        return pathlib.Path(uri)
     gvfs = Gio.Vfs.get_default()
-    return gvfs.get_file_for_uri(uri).get_path()
+    return pathlib.Path(gvfs.get_file_for_uri(uri).get_path())
 
 
 if __name__ == "__main__":
@@ -644,7 +641,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     #If input path does not exists
-    if not os.path.isdir(INPUT_FOLDER):
+    if not INPUT_FOLDER.is_dir():
         print("E: [%s:__main__] '%s' is not a directory" % (__file__, INPUT_FOLDER))
         sys.exit(2)
 
@@ -657,7 +654,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     #Folders whose name starts with a dot
-    elif CONF['ignored_dotted'] and re.match(r".*/\..*", INPUT_FOLDER):
+    elif CONF['ignored_dotted'] and re.match(r".*/\..*", str(INPUT_FOLDER)):
         sys.exit(0)
 
     #Music folders
@@ -675,7 +672,7 @@ if __name__ == "__main__":
                 thumbnail.music_thumbnail(
                         CONF['music_bg'],
                         CONF['music_fg'],
-                        CONF['music_cropimg']
+                        CONF['music_cropimg'],
                         )
                 thumbnail.save_thumb(OUTPUT_FILE, "PNG")
             else:
@@ -683,7 +680,7 @@ if __name__ == "__main__":
                 thumbnail.music_thumbnail_mosaic(
                         CONF['music_bg'],
                         CONF['music_fg'],
-                        CONF['music_cropimg']
+                        CONF['music_cropimg'],
                         )
                 thumbnail.save_thumb(OUTPUT_FILE, "PNG")
         elif not CONF['music_keepdefaulticon']:
@@ -691,7 +688,7 @@ if __name__ == "__main__":
             thumbnail.music_thumbnail(
                     CONF['music_bg'],
                     CONF['music_fg'],
-                    CONF['music_cropimg']
+                    CONF['music_cropimg'],
                     )
             thumbnail.save_thumb(OUTPUT_FILE, "PNG")
 
