@@ -44,7 +44,7 @@ Usage:
     cover-thumbnailer <directory's path> <output thumbnail's path>
 """
 
-__version__ = "0.10.2"
+__version__ = "0.10.2-k"
 __author__ = "Fabien Loison <http://www.flozz.fr/>"
 __copyright__ = "Copyright © 2009 - 2024 Fabien LOISON"
 
@@ -52,6 +52,9 @@ __copyright__ = "Copyright © 2009 - 2024 Fabien LOISON"
 import re
 import sys
 import os.path
+
+import gi
+gi.require_version("Gio", "2.0")
 from gi.repository import Gio
 
 try:
@@ -699,13 +702,15 @@ if __name__ == "__main__":
             picture_list = search_pictures(INPUT_FOLDER)
             if len(picture_list) == 0:
                 picture_list = search_pictures_recursiv(INPUT_FOLDER)
-        thumbnail = Thumb(picture_list)
-        thumbnail.pictures_thumbnail(
-                CONF['pictures_bg'],
-                CONF['pictures_fg'],
-                CONF['pictures_maxthumbs']
-                )
-        thumbnail.save_thumb(OUTPUT_FILE, "PNG")
+
+        if (len(picture_list) > 0) or not CONF['pictures_keepdefaulticon']:
+            thumbnail = Thumb(picture_list)
+            thumbnail.pictures_thumbnail(
+                    CONF['pictures_bg'],
+                    CONF['pictures_fg'],
+                    CONF['pictures_maxthumbs']
+                    )
+            thumbnail.save_thumb(OUTPUT_FILE, "PNG")
 
     #Other folders
     elif CONF['other_enabled']:
@@ -714,5 +719,3 @@ if __name__ == "__main__":
             thumbnail = Thumb(covers)
             thumbnail.other_thumbnail(CONF['other_fg'])
             thumbnail.save_thumb(OUTPUT_FILE, "PNG")
-
-
