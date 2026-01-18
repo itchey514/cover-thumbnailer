@@ -87,6 +87,8 @@ PICTURES_EXT = [
     ".tga", #Truevision Targa format
     ".tif", ".tiff", #Adobe Tagged Image File Format
     ".psd", #Adobe Photosop format (only version 2.5 and 3.0)
+    ".webp",
+    ".avif",
 ]
 
 #==============================================================================
@@ -249,17 +251,17 @@ class Thumb(object):
         height = image.size[1]
         if crop and width >= twidth and height >= theight:
             if width > height:
-                left = int((width - height) / 2)
+                left = int((width - height) // 2)
                 upper = 0
                 right = height + left
                 lower = height
             else:
                 left = 0
-                upper = int((height - width) / 2)
+                upper = int((height - width) // 2)
                 right = width
                 lower = width + upper
             image = image.crop((left, upper, right, lower))
-        image.thumbnail((twidth, theight), Image.LANCZOS)
+        image.thumbnail((twidth, theight), Image.Resampling.LANCZOS)
         return image
 
     def music_thumbnail(self, bg_picture, fg_picture, crop=True):
@@ -280,8 +282,8 @@ class Thumb(object):
         cover_height = cover.size[1]
         #Cover position on background
         delta = bg_width - bg_height #The left border of album
-        x = int((bg_width - cover_width + delta) / 2)
-        y = int((bg_height - cover_height) / 2)
+        x = int((bg_width - cover_width + delta) // 2)
+        y = int((bg_height - cover_height) // 2)
         #Past cover on background
         bg.paste(cover, (x, y), cover)
         #Forground picture
@@ -307,7 +309,7 @@ class Thumb(object):
         #Album covers
         covers_thumb = []
         for img in self.img:
-            cover_thumb = self.thumbnailize(img, int(bg_height / 2), crop=crop)
+            cover_thumb = self.thumbnailize(img, int(bg_height // 2), crop=crop)
             cover_thumb_width = cover_thumb.size[0]
             cover_thumb_height = cover_thumb.size[1]
             covers_thumb.append({
@@ -368,8 +370,8 @@ class Thumb(object):
                     bg_height - 20,
                     crop=False
                     )
-            x = int((bg_width - thumb.size[0]) / 2)
-            y = int((bg_height - thumb.size[1]) / 2)
+            x = int((bg_width - thumb.size[0]) // 2)
+            y = int((bg_height - thumb.size[1]) // 2)
             picts.append({
                     'thumb': thumb,
                     'x': x,
@@ -425,7 +427,7 @@ class Thumb(object):
             #Thumb 2
             h = int(bg_height - max(picts[0]['thumb'].size[1], picts[1]['thumb'].size[1]) - 15)
             thumb = self.thumbnailize(self.img[2], 103, h, crop=False)
-            x = int((bg_width - 15 - thumb.size[0])/2 + 15)
+            x = int((bg_width - 15 - thumb.size[0])//2 + 15)
             y = int(bg_height - thumb.size[1] - 5)
             picts.append({
                     'thumb': thumb,
@@ -705,7 +707,7 @@ if __name__ == "__main__":
             thumbnail.pictures_thumbnail(
                     CONF['pictures_bg'],
                     CONF['pictures_fg'],
-                    CONF['pictures_maxthumbs']
+                    CONF['pictures_maxthumbs'],
                     )
             thumbnail.save_thumb(OUTPUT_FILE, "PNG")
 
