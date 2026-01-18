@@ -51,17 +51,21 @@ __copyright__ = "Copyright © 2009 - 2024 Fabien LOISON"
 
 import re
 import sys
-import os.path
+import os
 import pathlib
+from collections.abc import Iterable
 
 import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio
 
-try:
-    from PIL import Image
-except:
-    import Image
+# try:
+#     from PIL import Image
+# except:
+#     import Image
+from PIL import Image
+
+PathType = os.PathLike | str
 
 
 #==================================================================== CONF ====
@@ -142,7 +146,7 @@ class Conf(dict):
         self.import_user_conf()
         self.import_gnome_conf()
 
-    def import_gnome_conf(self):
+    def import_gnome_conf(self) -> None:
         """ Import user folders from GNOME configuration file. """
         if self.user_gnomeconf.is_file():
             with self.user_gnomeconf.open() as gnome_conf_file:
@@ -164,7 +168,7 @@ class Conf(dict):
         else:
             print("W: [%s:Conf.import_gnome_conf] Can't find `user-dirs.dirs' file." % __file__)
 
-    def import_user_conf(self):
+    def import_user_conf(self) -> None:
         """ Import user configuration file. """
         if self.user_conf.is_file():
             current_section = "unknown"
@@ -202,7 +206,7 @@ class Conf(dict):
 
             #Replace "~/" by the user home dir
             for path_list in (self['music_paths'], self['pictures_paths'], self['ignored_paths']):
-                for i in range(0, len(path_list)):
+                for i in range(len(path_list)):
                     path = pathlib.Path(path_list[i])
                     path_list[i] = path.expanduser()
 
@@ -212,18 +216,18 @@ class Conf(dict):
                 self["pictures_usegnomefolder"] = self["miscellaneous_usegnomeconf"]
 
 
-class Thumb(object):
+class Thumb:
     """ Makes thumbnails.
 
     Generate thumbnails for all kind of folders
     """
-    def __init__(self, img_paths):
+    def __init__(self, img_paths: Iterable[PathType]):
         """The constructor.
 
         Argument:
           * img_paths -- a list of picture path
         """
-        self.img = []
+        self.img: list[Image.Image] = []
         for path in img_paths:
             try:
                 img = Image.open(path).convert("RGBA")
@@ -231,9 +235,9 @@ class Thumb(object):
                 print("E: [%s:Thumb.__init__] Can't open '%s'." % (__file__, path))
             else:
                 self.img.append(img)
-        self.thumb = None
+        self.thumb: Image.Image|None = None
 
-    def thumbnailize(self, image, twidth=128, theight=128, crop=True):
+    def thumbnailize(self, image: Image.Image, twidth: int=128, theight: int=128, crop: bool=True) -> Image.Image:
         """ Make thumbnail.
 
         Crop the picture if necessaries and return a thumbnail of it.
@@ -251,20 +255,20 @@ class Thumb(object):
         height = image.size[1]
         if crop and width >= twidth and height >= theight:
             if width > height:
-                left = int((width - height) // 2)
+                left = (width - height) // 2
                 upper = 0
                 right = height + left
                 lower = height
             else:
                 left = 0
-                upper = int((height - width) // 2)
+                upper = (height - width) // 2
                 right = width
                 lower = width + upper
             image = image.crop((left, upper, right, lower))
         image.thumbnail((twidth, theight), Image.Resampling.LANCZOS)
         return image
 
-    def music_thumbnail(self, bg_picture, fg_picture, crop=True):
+    def music_thumbnail(self, bg_picture: PathType, fg_picture: PathType, crop: bool=True) -> None:
         """ Makes thumbnails for music folders.
 
         Argument:
@@ -282,8 +286,8 @@ class Thumb(object):
         cover_height = cover.size[1]
         #Cover position on background
         delta = bg_width - bg_height #The left border of album
-        x = int((bg_width - cover_width + delta) // 2)
-        y = int((bg_height - cover_height) // 2)
+        x = (bg_width - cover_width + delta) // 2
+        y = (bg_height - cover_height) // 2
         #Past cover on background
         bg.paste(cover, (x, y), cover)
         #Forground picture
@@ -292,7 +296,7 @@ class Thumb(object):
         bg.paste(fg, (0, 0), fg)
         self.thumb = bg
 
-    def music_thumbnail_mosaic(self, bg_picture, fg_picture, crop=True):
+    def music_thumbnail_mosaic(self, bg_picture: PathType, fg_picture: PathType, crop: bool=True) -> None:
         """ Makes thumbnails composed by more than one cover for music folders.
 
         Argument:
@@ -307,7 +311,7 @@ class Thumb(object):
         bg_width = bg.size[0]
         bg_height = bg.size[1]
         #Album covers
-        covers_thumb = []
+        covers_thumb: list[dict] = []
         for img in self.img:
             cover_thumb = self.thumbnailize(img, int(bg_height // 2), crop=crop)
             cover_thumb_width = cover_thumb.size[0]
@@ -315,7 +319,7 @@ class Thumb(object):
             covers_thumb.append({
                 'cover': cover_thumb,
                 'width': cover_thumb_width,
-                'height': cover_thumb_height
+                'height': cover_thumb_height,
                 })
         #For having 4 covers for the mosaic
         if len(covers_thumb) == 2:
@@ -334,10 +338,10 @@ class Thumb(object):
         covers_thumb[3]['x'] = int(3*(bg_width - delta)/4 - covers_thumb[3]['width']/2 + delta)
         covers_thumb[3]['y'] = int(3*bg_height/4 - covers_thumb[3]['height']/2)
         #Paste covers on background
-        for i in range(0, 4):
+        for i in range(4):
             bg.paste(covers_thumb[i]['cover'],
                     (covers_thumb[i]['x'], covers_thumb[i]['y']),
-                    covers_thumb[i]['cover']
+                    covers_thumb[i]['cover'],
                     )
         #Forground picture
         fg = Image.open(fg_picture).convert("RGBA")
@@ -345,7 +349,7 @@ class Thumb(object):
         bg.paste(fg, (0, 0), fg)
         self.thumb = bg
 
-    def pictures_thumbnail(self, bg_picture, fg_picture, max_pictures=3):
+    def pictures_thumbnail(self, bg_picture: PathType, fg_picture: PathType, max_pictures: int=3) -> None:
         """ Makes thumbnails for picture folders.
 
         Arguments:
@@ -359,7 +363,7 @@ class Thumb(object):
         bg = Image.open(bg_picture).convert("RGBA")
         bg_width = bg.size[0]
         bg_height = bg.size[1]
-        picts = []
+        picts: list[dict] = []
         number_of_pictures = 0
         #One picture
         if len(self.img) == 1 or max_pictures == 1 and len(self.img) > 0:
@@ -368,14 +372,14 @@ class Thumb(object):
                     self.img[0],
                     bg_width - 20,
                     bg_height - 20,
-                    crop=False
+                    crop=False,
                     )
-            x = int((bg_width - thumb.size[0]) // 2)
-            y = int((bg_height - thumb.size[1]) // 2)
+            x = (bg_width - thumb.size[0]) // 2
+            y = (bg_height - thumb.size[1]) // 2
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': y
+                    'y': y,
                     })
         #Two pictures
         elif len(self.img) == 2 or max_pictures == 2 and len(self.img) > 0:
@@ -385,26 +389,26 @@ class Thumb(object):
                     self.img[0],
                     bg_width - 20,
                     int(0.53*bg_height),
-                    crop=False
+                    crop=False,
                     )
             picts.append({
                     'thumb': thumb,
                     'x': 10,
-                    'y': 5
+                    'y': 5,
                     })
             #Thumb 1
             thumb = self.thumbnailize(
                     self.img[1],
                     bg_width - 20,
                     int(0.53*bg_height),
-                    crop=False
+                    crop=False,
                     )
             x = bg_width - thumb.size[0] - 10
             y = bg_height - thumb.size[1] - 5
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': y
+                    'y': y,
                     })
         #Three pictures
         elif len(self.img) == 3 or max_pictures == 3 and len(self.img) > 0:
@@ -414,7 +418,7 @@ class Thumb(object):
             picts.append({
                     'thumb': thumb,
                     'x': 20,
-                    'y': 5
+                    'y': 5,
                     })
             #Thumb 1
             thumb = self.thumbnailize(self.img[1], 49, 56, crop=False)
@@ -422,17 +426,17 @@ class Thumb(object):
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': 5
+                    'y': 5,
                     })
             #Thumb 2
             h = int(bg_height - max(picts[0]['thumb'].size[1], picts[1]['thumb'].size[1]) - 15)
             thumb = self.thumbnailize(self.img[2], 103, h, crop=False)
-            x = int((bg_width - 15 - thumb.size[0])//2 + 15)
-            y = int(bg_height - thumb.size[1] - 5)
+            x = (bg_width - 15 - thumb.size[0]) // 2 + 15
+            y = bg_height - thumb.size[1] - 5
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': y
+                    'y': y,
                     })
         #Four pictures
         elif len(self.img) == 4 or max_pictures == 4 and len(self.img) > 0:
@@ -442,71 +446,71 @@ class Thumb(object):
                     self.img[0],
                     int(bg_width/2 - 7.5),
                     int(bg_height/2 - 7.5),
-                    crop=False
+                    crop=False,
                     )
             x = int(1*bg_width/4 - thumb.size[0]/2)
             y = int(1*bg_height/4 - thumb.size[1]/2)
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': y
+                    'y': y,
                     })
             #Thumb 1
             thumb = self.thumbnailize(
                     self.img[1],
                     int(bg_width/2 - 7.5),
                     int(bg_height/2 - 7.5),
-                    crop=False
+                    crop=False,
                     )
             x = int(3*bg_width/4 - thumb.size[0]/2)
             y = int(1*bg_height/4 - thumb.size[1]/2)
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': y
+                    'y': y,
                     })
             #Thumb 2
             thumb = self.thumbnailize(
                     self.img[2],
                     int(bg_width/2 - 7.5),
                     int(bg_height/2 - 7.5),
-                    crop=False
+                    crop=False,
                     )
             x = int(1*bg_width/4 - thumb.size[0]/2)
             y = int(3*bg_height/4 - thumb.size[1]/2)
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': y
+                    'y': y,
                     })
             #Thumb 3
             thumb = self.thumbnailize(
                     self.img[3],
                     int(bg_width/2 - 7.5),
                     int(bg_height/2 - 7.5),
-                    crop=False
+                    crop=False,
                     )
             x = int(3*bg_width/4 - thumb.size[0]/2)
             y = int(3*bg_height/4 - thumb.size[1]/2)
             picts.append({
                     'thumb': thumb,
                     'x': x,
-                    'y': y
+                    'y': y,
                     })
 
         #Paste pictures on background
-        for i in range(0, number_of_pictures):
+        for i in range(number_of_pictures):
             bg.paste(
                     picts[i]['thumb'],
                     (picts[i]['x'], picts[i]['y']),
-                    picts[i]['thumb']
+                    picts[i]['thumb'],
                     )
         #Paste forground on background+pictures
         fg = Image.open(fg_picture).convert("RGBA")
         bg.paste(fg, (0, 0), fg)
         self.thumb = bg
 
-    def other_thumbnail(self, fg_picture):
+    def other_thumbnail(self, fg_picture: PathType) -> None:
         """ Makes thumbnails for "other" folders
 
         Argument:
@@ -520,7 +524,7 @@ class Thumb(object):
                 image.paste(fg, (0, 0), fg)
                 self.thumb = image
 
-    def save_thumb(self, output_path, output_format='PNG'):
+    def save_thumb(self, output_path: PathType, output_format: str|None='PNG') -> None:
         """ Save the thumbnail in a file.
 
         Argument:
@@ -531,13 +535,13 @@ class Thumb(object):
         NOTE : The output format must be a PNG for a standard
                freedesktop thumbnail
         """
-        if self.thumb is not None:
+        if self.thumb:
             self.thumb.save(output_path, output_format)
         else:
             print("E: [%s:Thumb.save_thumb] No thumbnail created" % __file__)
 
 
-def search_cover(path):
+def search_cover(path: PathType) -> list[pathlib.Path]:
     """ Search for a cover file.
 
     Search for files like cover.png, .folder.jpg,... in the folder and return
@@ -548,16 +552,16 @@ def search_cover(path):
     """
     path = pathlib.Path(path)
 
-    cover_path = []
+    cover_path: list[pathlib.Path] = []
     for cover in COVER_FILES:
         p = path / cover
         if p.is_file():
             cover_path.append(p)
-            break
+            # break
     return cover_path
 
 
-def search_pictures(path):
+def search_pictures(path: PathType, max_pictures: int=4) -> list[pathlib.Path]:
     """ Search for pictures in the folder
 
     Search for pictures in the folder and return their name as a list (or an
@@ -568,16 +572,16 @@ def search_pictures(path):
     """
     path = pathlib.Path(path)
 
-    pictures = []
+    pictures: list[pathlib.Path] = []
     for file_ in path.iterdir():
         if file_.suffix.lower() in PICTURES_EXT:
             pictures.append(file_)
-        if len(pictures) >= 4: #4 pictures max... don't need more
+        if len(pictures) >= max_pictures: #4 pictures max... don't need more
             break
     return pictures
 
 
-def search_pictures_recursiv(path):
+def search_pictures_recursiv(path: PathType, max_pictures: int=4) -> list[pathlib.Path]:
     """ Search recursively for pictures in the folder
 
     Search for pictures in the subfolders and return their name as a list
@@ -588,9 +592,9 @@ def search_pictures_recursiv(path):
     """
     path = pathlib.Path(path)
 
-    pictures = []
+    pictures: list[pathlib.Path] = []
     for root, _, files in path.walk():
-        if len(pictures) <= 4: #4 pictures max... don't need more
+        if len(pictures) <= max_pictures: #4 pictures max... don't need more
             for file_ in files:
                 if pathlib.Path(file_).suffix.lower() in PICTURES_EXT:
                     pictures.append(path / root / file_)
@@ -600,7 +604,7 @@ def search_pictures_recursiv(path):
     return pictures
 
 
-def match_path(path, path_list):
+def match_path(path: PathType, path_list: list[PathType]) -> bool:
     """ Test if a folder is a sub-folder of another one in the list.
 
     Arguments
@@ -618,7 +622,7 @@ def match_path(path, path_list):
     return match
 
 
-def gvfs_uri_to_path(uri):
+def gvfs_uri_to_path(uri: str) -> pathlib.Path:
     """Returns local file path from gvfs URI
 
     Arguments:
@@ -698,9 +702,9 @@ if __name__ == "__main__":
     elif CONF['pictures_enabled'] and match_path(INPUT_FOLDER, CONF['pictures_paths']):
         picture_list = search_cover(INPUT_FOLDER)
         if len(picture_list) == 0:
-            picture_list = search_pictures(INPUT_FOLDER)
+            picture_list = search_pictures(INPUT_FOLDER, CONF['pictures_maxthumbs'])
             if len(picture_list) == 0:
-                picture_list = search_pictures_recursiv(INPUT_FOLDER)
+                picture_list = search_pictures_recursiv(INPUT_FOLDER, CONF['pictures_maxthumbs'])
 
         if (len(picture_list) > 0) or not CONF['pictures_keepdefaulticon']:
             thumbnail = Thumb(picture_list)
